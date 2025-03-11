@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("klokapp(MIRA)")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e8d4f036aeb17af50f6292c6d3caa52d75d701cd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+0a955df20f7ec368ebd0d89b2d96ea95a3e3b5ff")]
 [assembly: System.Reflection.AssemblyProductAttribute("klokapp(MIRA)")]
 [assembly: System.Reflection.AssemblyTitleAttribute("klokapp(MIRA)")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

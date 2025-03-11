@@ -105,21 +105,88 @@ class Program
                 // Chỉ mở ChatGPT nếu đã đăng nhập Klokapp thành công
                 if (isKlokLoggedIn)
                 {
-                    Console.WriteLine("Dang mo ChatGPT...");
-                    Thread.Sleep(2000);
-                    
-                    try
-                    {
-                        chatGptDriver = new EdgeDriver(chatGptOptions);
-                        chatGptDriver.Navigate().GoToUrl(CHATGPT_URL);
-                        Console.WriteLine("Da mo ChatGPT thanh cong!");
+                    Console.WriteLine("🤖 Đang mở ChatGPT...");
+                        Thread.Sleep(2000);
                         
-                        // Tiếp tục với logic xử lý chat hiện tại
-                        // ... existing chat handling code ...
+                        try
+                        {
+                            chatGptDriver = new EdgeDriver(chatGptOptions);
+                            chatGptDriver.Navigate().GoToUrl(CHATGPT_URL);
+                        Console.WriteLine("✅ Đã mở ChatGPT thành công!");
+
+                        Console.WriteLine("⌛ Đợi ChatGPT khởi động...");
+                        Thread.Sleep(5000);
+
+                        var wait = new WebDriverWait(chatGptDriver, TimeSpan.FromSeconds(10));
+
+                        // Đợi và lấy câu trả lời từ ChatGPT
+                        Console.WriteLine("⌛ Đợi ChatGPT trả lời...");
+                        try 
+                        {
+                            // Đợi cho đến khi không còn thấy "Generating..."
+                            wait.Until(d => {
+                                try {
+                                    var generating = d.FindElement(By.XPath("//div[contains(text(), 'Generating')]"));
+                                    Console.WriteLine("⌛ ChatGPT đang trả lời...");
+                                    return false;
+                                }
+                                catch (NoSuchElementException) {
+                                    return true;
+                                }
+                            });
+
+                            // Đợi thêm 1 giây để đảm bảo nội dung đã load hoàn tất
+                            Thread.Sleep(1000);
+
+                            // Lấy câu trả lời mới nhất
+                            var responses = chatGptDriver.FindElements(By.CssSelector("div.markdown"));
+                            if (responses.Count > 0)
+                            {
+                                var lastResponse = responses.Last();
+                                string chatGptResponse = lastResponse.Text;
+
+                                if (!string.IsNullOrEmpty(chatGptResponse))
+                                {
+                                    Console.WriteLine("\n🤖 ChatGPT trả lời:");
+                                    Console.WriteLine("------------------------------------------");
+                                    Console.WriteLine(chatGptResponse);
+                                    Console.WriteLine("------------------------------------------");
+                                    Console.WriteLine($"📏 Độ dài câu trả lời: {chatGptResponse.Length} ký tự");
+
+                                    // Sau khi có câu trả lời, tìm textarea của Klok
+                                    Console.WriteLine("\n[INFO] Tìm textarea của Klok...");
+                                    var textareas = klokDriver.FindElements(By.TagName("textarea"));
+                                    var klokInput = textareas.FirstOrDefault(t => 
+                                        t.Displayed && 
+                                        t.Enabled);
+
+                                    if (klokInput != null)
+                                    {
+                                        Console.WriteLine("[SUCCESS] Đã tìm thấy textarea của Klok!");
+                                        klokInput.Clear();
+                                        klokInput.SendKeys(chatGptResponse);
+                                        klokInput.SendKeys(Keys.Enter);
+                                        Console.WriteLine("[SUCCESS] Đã gửi tin nhắn!");
+                                        
+                                        // Đợi phản hồi từ Klok
+                                        Console.WriteLine("[INFO] Đợi phản hồi từ Klok...");
+                                        Thread.Sleep(7000);
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("[ERROR] Không tìm thấy textarea của Klok!");
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"❌ Lỗi khi xử lý câu trả lời: {ex.Message}");
+                        }
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"Loi khi mo ChatGPT: {ex.Message}");
+                        Console.WriteLine($"❌ Lỗi khi mở ChatGPT: {ex.Message}");
                     }
                 }
                 else
@@ -442,32 +509,45 @@ class Program
                     try
                     {
                         // Đợi và lấy câu trả lời từ ChatGPT
-                        var lastResponse = wait.Until(driver => 
+                        var response = wait.Until(driver => 
                             driver.FindElement(By.XPath("(//div[contains(@class, \"markdown\")])[last()]")));
   
-                        if (lastResponse != null)
+                        if (response != null)
                         {
                             // Hiển thị thông tin về phần tử chứa câu trả lời
                             Console.WriteLine("\n🔍 Thông tin về phần tử chứa câu trả lời:");
-                            Console.WriteLine($"📝 Class: {lastResponse.GetAttribute("class")}");
-                            Console.WriteLine($"📝 Role: {lastResponse.GetAttribute("role")}");
+                            Console.WriteLine($"📝 Class: {response.GetAttribute("class")}");
+                            Console.WriteLine($"📝 Role: {response.GetAttribute("role")}");
                             
                             Console.WriteLine("\n🤖 ChatGPT trả lời:");
                             Console.WriteLine("------------------------------------------");
-                            Console.WriteLine(lastResponse.Text);
+                            Console.WriteLine(response.Text);
                             Console.WriteLine("------------------------------------------\n");
-                            Console.WriteLine($"📏 Độ dài câu trả lời: {lastResponse.Text.Length} ký tự");
+                            Console.WriteLine($"📏 Độ dài câu trả lời: {response.Text.Length} ký tự");
                             
-                            // Lưu nội dung để kiểm tra
-                            string copiedText = lastResponse.Text;
-                            if (string.IsNullOrEmpty(copiedText))
+                            // Thêm log chi tiết về nội dung copy
+                            Console.WriteLine("\n📋 Nội dung đã copy:");
+                            Console.WriteLine("------------------------------------------");
+                            foreach (var line in response.Text.Split('\n'))
+                            {
+                                Console.WriteLine($"| {line}");
+                            }
+                            Console.WriteLine("------------------------------------------");
+                            
+                            // Kiểm tra và log các ký tự đặc biệt
+                            Console.WriteLine("\n🔍 Kiểm tra ký tự đặc biệt:");
+                            Console.WriteLine($"- Có chứa xuống dòng: {response.Text.Contains("\n")}");
+                            Console.WriteLine($"- Có chứa tab: {response.Text.Contains("\t")}");
+                            Console.WriteLine($"- Có chứa khoảng trắng đầu/cuối: {response.Text.Trim().Length != response.Text.Length}");
+                            
+                            if (string.IsNullOrEmpty(response.Text))
                             {
                                 Console.WriteLine("⚠️ Cảnh báo: Nội dung copy được là rỗng!");
                                 
                                 // Thử lấy nội dung bằng JavaScript
                                 Console.WriteLine("🔄 Thử lấy nội dung bằng JavaScript...");
                                 IJavaScriptExecutor js = (IJavaScriptExecutor)chatGptDriver;
-                                copiedText = (string)js.ExecuteScript("return arguments[0].textContent;", lastResponse);
+                                var copiedText = (string)js.ExecuteScript("return arguments[0].textContent;", response);
                                 
                                 if (string.IsNullOrEmpty(copiedText))
                                 {
@@ -521,7 +601,7 @@ class Program
                                 // Clear và gửi text
                                 Console.WriteLine("[INFO] Sending message to Klokapp...");
                                 klokInput.Clear();
-                                klokInput.SendKeys(copiedText);
+                                klokInput.SendKeys(response.Text);
                                 klokInput.SendKeys(Keys.Enter);
                                 Console.WriteLine("[SUCCESS] Message sent to Klokapp!");
 
@@ -802,38 +882,38 @@ class Program
                                             Thread.Sleep(3000);
                                             
                                             // Thử nhiều cách tìm nút
-                                            IWebElement? connectButton = null;
-                                            
-                                            // Cách 1: Tìm bằng data-testid
+                            IWebElement? connectButton = null;
+                            
+                            // Cách 1: Tìm bằng data-testid
                                             Console.WriteLine("\nCach 1: Tim bang data-testid...");
-                                            try
-                                            {
+                            try
+                            {
                                                 connectButton = driver.FindElement(By.CssSelector("[data-testid='confirm-btn']"));
                                                 Console.WriteLine("-> Tim thay nut bang data-testid!");
-                                            }
+                            }
                                             catch (Exception ex) 
-                                            {
+                            {
                                                 Console.WriteLine($"-> Khong tim thay: {ex.Message}");
-                                            }
+                            }
 
                                             // Cách 2: Tìm bằng XPath text
-                                            if (connectButton == null)
-                                            {
+                            if (connectButton == null)
+                            {
                                                 Console.WriteLine("\nCach 2: Tim bang XPath text...");
-                                                try
-                                                {
+                                try
+                                {
                                                     connectButton = driver.FindElement(By.XPath("//button[contains(text(), 'Connect')]"));
                                                     Console.WriteLine("-> Tim thay nut bang XPath!");
-                                                }
+                                }
                                                 catch (Exception ex)
-                                                {
+                                {
                                                     Console.WriteLine($"-> Khong tim thay: {ex.Message}");
-                                                }
-                                            }
+                                }
+                            }
 
                                             // Cách 3: Tìm tất cả button và kiểm tra text
-                                            if (connectButton == null)
-                                            {
+                            if (connectButton == null)
+                            {
                                                 Console.WriteLine("\nCach 3: Tim trong tat ca cac nut...");
                                                 try
                                                 {
@@ -874,8 +954,8 @@ class Program
                                             }
 
                                             // Nếu tìm thấy nút, thử click
-                                            if (connectButton != null)
-                                            {
+                            if (connectButton != null)
+                            {
                                                 Console.WriteLine("\nKET QUA: Da tim thay nut Connect!");
                                                 Console.WriteLine($"Text: {connectButton.Text}");
                                                 Console.WriteLine($"Class: {connectButton.GetAttribute("class")}");
@@ -885,33 +965,33 @@ class Program
                                                 
                                                 // Đợi một chút và thử click
                                                 Thread.Sleep(1000);
-                                                
-                                                if (connectButton.Displayed && connectButton.Enabled)
-                                                {
+                                
+                                if (connectButton.Displayed && connectButton.Enabled)
+                                {
                                                     Console.WriteLine("\nClick vao nut Connect...");
-                                                    connectButton.Click();
+                                    connectButton.Click();
                                                     Console.WriteLine("Da click nut Connect!");
                                                     Thread.Sleep(2000);
-                                                }
-                                                else
-                                                {
+                                }
+                                else
+                                {
                                                     Console.WriteLine("\nNut Connect khong the click!");
-                                                }
-                                            }
-                                            else
-                                            {
+                                }
+                            }
+                            else
+                            {
                                                 Console.WriteLine("\nKET QUA: Khong tim thay nut Connect bang bat ky cach nao!");
-                                            }
-                                        }
-                                        catch (Exception ex)
-                                        {
+                            }
+                        }
+                        catch (Exception ex)
+                        {
                                             Console.WriteLine($"\nLoi khi tim hoac click nut: {ex.Message}");
-                                        }
+                        }
 
-                                        // Chuyển về cửa sổ chính
+                        // Chuyển về cửa sổ chính
                                         Console.WriteLine("\nChuyen ve cua so chinh");
                                         driver.SwitchTo().Window(metamaskMainWindow);
-                                        return;
+                return;
                                     }
                                 }
                             }
@@ -937,8 +1017,8 @@ class Program
             if (isRunning)
             {
                 Console.WriteLine("Chuong trinh tam dung. Nhan Enter de thu lai hoac Ctrl+C de thoat...");
-                Console.ReadLine();
-                if (isRunning) HandleMetamask(driver);
+            Console.ReadLine();
+            if (isRunning) HandleMetamask(driver);
             }
         }
     }
