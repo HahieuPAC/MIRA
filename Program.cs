@@ -2,6 +2,7 @@
 using OpenQA.Selenium.Edge;
 using OpenQA.Selenium.Support.UI;
 using OpenQA.Selenium.Interactions;
+using SeleniumExtras.WaitHelpers;
 using System;
 using System.IO;
 using System.Text;
@@ -17,17 +18,20 @@ class Program
     static IWebDriver? chatGptDriver = null;
     static bool isRunning = true;
     static readonly string KLOK_URL = "https://klokapp.ai/app";
-    static readonly string CHATGPT_URL = "https://chatgpt.com/c/67cdbd3e-3f7c-800c-b3db-f5047e8f4634";
+    static readonly string CHATGPT_URL = "https://chatgpt.com/c/67cf813f-dce4-800c-ac3e-787f0c39c0f3";
     static readonly string METAMASK_PASSWORD = "H@trunghj3up@c112358";
     
     // Thêm hằng số cho đường dẫn profile
     static readonly string BASE_EDGE_USER_DATA_DIR = GetEdgeUserDataDir();
     static readonly string CHATGPT_USER_DATA_DIR = Path.Combine(
-        Path.GetDirectoryName(GetEdgeUserDataDir()) ?? "",
-        "User Data ChatGPT"
+        Path.GetDirectoryName(BASE_EDGE_USER_DATA_DIR) ?? "",
+        "Edge",
+        "User Data",
+        "ChatGPT"
+    ).Replace(
+        Path.Combine("Edge", "Edge"),
+        "Edge"
     );
-
-    static readonly string KLOK_INPUT_XPATH = "/html/body/div[1]/div[2]/div[2]/div[2]/div[1]/form/div/textarea";
 
     static void Main()
     {
@@ -58,6 +62,8 @@ class Program
             klokDriver.Navigate().GoToUrl(KLOK_URL);
             Console.WriteLine("Da mo Klokapp thanh cong");
 
+            bool isKlokLoggedIn = false;
+
             // Kiểm tra xem đã đăng nhập chưa
             try
             {
@@ -73,33 +79,61 @@ class Program
                     if (chatInput != null)
                     {
                         Console.WriteLine("Da tim thay phan tu chat input -> Da dang nhap!");
-                        
-                        // Mở ChatGPT trong cửa sổ mới
-                        Console.WriteLine("Dang mo ChatGPT...");
-                        Thread.Sleep(2000);
-                        
-                        try
-                        {
-                            chatGptDriver = new EdgeDriver(chatGptOptions);
-                            chatGptDriver.Navigate().GoToUrl(CHATGPT_URL);
-                            Console.WriteLine("Da mo ChatGPT thanh cong!");
-                        }
-                        catch (Exception ex)
-                        {
-                            Console.WriteLine($"Loi khi mo ChatGPT: {ex.Message}");
-                        }
+                        isKlokLoggedIn = true;
                     }
                 }
                 catch (NoSuchElementException)
                 {
-                    Console.WriteLine("Chua dang nhap -> Tim nut Connect Wallet...");
-                    // Tiếp tục code tìm nút Connect Wallet và xử lý đăng nhập
-                    // ... code xử lý đăng nhập hiện tại ...
+                    Console.WriteLine("Chua dang nhap -> Tien hanh dang nhap...");
+                    // Xử lý đăng nhập
+                    HandleKlokLogin(klokDriver);
+                    
+                    // Kiểm tra lại sau khi đăng nhập
+                    Thread.Sleep(5000);
+                    try {
+                        var chatInput = klokDriver.FindElement(By.XPath(chatInputXPath));
+                        if (chatInput != null) {
+                            Console.WriteLine("Dang nhap thanh cong!");
+                            isKlokLoggedIn = true;
+                        }
+                    } catch (NoSuchElementException) {
+                        Console.WriteLine("Dang nhap that bai!");
+                        isKlokLoggedIn = false;
+                    }
+                }
+
+                // Chỉ mở ChatGPT nếu đã đăng nhập Klokapp thành công
+                if (isKlokLoggedIn)
+                {
+                    Console.WriteLine("Dang mo ChatGPT...");
+                    Thread.Sleep(2000);
+                    
+                    try
+                    {
+                        chatGptDriver = new EdgeDriver(chatGptOptions);
+                        chatGptDriver.Navigate().GoToUrl(CHATGPT_URL);
+                        Console.WriteLine("Da mo ChatGPT thanh cong!");
+                        
+                        // Tiếp tục với logic xử lý chat hiện tại
+                        // ... existing chat handling code ...
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Loi khi mo ChatGPT: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Khong the mo ChatGPT vi chua dang nhap Klokapp!");
+                    CleanupAndExit();
+                    return;
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Loi khi kiem tra trang thai dang nhap: {ex.Message}");
+                CleanupAndExit();
+                return;
             }
 
             // Thêm phần tìm và click button với log chi tiết
@@ -273,38 +307,57 @@ class Program
                             signInButton.Click();
                             Console.WriteLine("Da click vao nut Sign In!");
                             
-                            // Đợi sau khi click
-                            Thread.Sleep(2000);
-                        }
-                        else 
-                        {
-                            Console.WriteLine("Nut Sign In khong the click!");
-                            Console.WriteLine($"- Hien thi: {signInButton.Displayed}");
-                            Console.WriteLine($"- Kich hoat: {signInButton.Enabled}");
+                            // Sau khi click Sign In, đợi và xử lý cửa sổ Metamask mới
+                            Console.WriteLine("Doi cua so Metamask moi xuat hien...");
+                            Thread.Sleep(3000);
+
+                            // Tìm và xử lý cửa sổ Metamask mới
+                            string mainWindow = klokDriver.CurrentWindowHandle;
+                            bool foundMetamaskWindow = false;
+
+                            foreach (string handle in klokDriver.WindowHandles)
+                            {
+                                if (handle != mainWindow)
+                                {
+                                    klokDriver.SwitchTo().Window(handle);
+                                    if (klokDriver.Title == "MetaMask")
+                                    {
+                                        Console.WriteLine("Da tim thay cua so Metamask moi!");
+                                        foundMetamaskWindow = true;
+
+                                        // Tab 7 lần để đến nút Confirm
+                                        Console.WriteLine("\nTab 7 lan den nut Confirm...");
+                                        var actions = new Actions(klokDriver);
+                                        for (int i = 0; i < 7; i++)
+                                        {
+                                            actions.SendKeys(Keys.Tab).Perform();
+                                            Thread.Sleep(500);
+                                            Console.WriteLine($"Tab lan {i + 1}");
+                                        }
+
+                                        // Click nút Confirm
+                                        Console.WriteLine("Click nut Confirm...");
+                                        actions.SendKeys(Keys.Enter).Perform();
+                                        Console.WriteLine("Da click nut Confirm!");
+                                        Thread.Sleep(2000);
+
+                                        // Chuyển về cửa sổ chính
+                                        klokDriver.SwitchTo().Window(mainWindow);
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!foundMetamaskWindow)
+                            {
+                                Console.WriteLine("Khong tim thay cua so Metamask moi!");
+                            }
                         }
                     }
                 }
-                catch (NoSuchElementException)
+                catch (Exception ex)
                 {
-                    Console.WriteLine("Khong tim thay nut Sign In, thu lai sau 3 giay...");
-                    Thread.Sleep(3000);
-                    
-                    try
-                    {
-                        Console.WriteLine("Tim nut Sign In lan 2...");
-                        signInButton = klokDriver.FindElement(By.XPath(signInButtonXPath));
-                        if (signInButton != null && signInButton.Displayed)
-                        {
-                            signInButton.Click();
-                            Console.WriteLine("Da click nut Sign In trong lan thu 2!");
-                        }
-                    }
-                    catch (Exception retryEx)
-                    {
-                        Console.WriteLine($"Khong the tim nut Sign In lan 2: {retryEx.Message}");
-                        Console.WriteLine("HTML hien tai:");
-                        Console.WriteLine(klokDriver.PageSource.Substring(0, 500) + "...");
-                    }
+                    Console.WriteLine($"Loi khi tim hoac click nut Sign In: {ex.Message}");
                 }
             }
             catch (Exception ex)
@@ -373,7 +426,7 @@ class Program
                             try
                             {
                                 var composerBackground = chatGptDriver.FindElement(By.Id("composer-background"));
-                                Console.WriteLine("📝 HTML của composer-background:");
+                                Console.WriteLine("HTML của composer-background:");
                                 Console.WriteLine(composerBackground.GetAttribute("innerHTML"));
                             }
                             catch
@@ -442,20 +495,20 @@ class Program
                             {
                                 klokInput = klokDriver.FindElement(By.XPath(klokInputXPath));
                                 Console.WriteLine("[SUCCESS] Found Klokapp input!");
-                                        }
-                                        catch (NoSuchElementException)
-                                        {
+                            }
+                            catch (NoSuchElementException)
+                            {
                                 Console.WriteLine("[ERROR] Input not found immediately");
                                 Console.WriteLine("[INFO] Waiting 5 seconds and trying again...");
-                                    Thread.Sleep(5000);
+                                Thread.Sleep(5000);
 
-                                    try
-                                    {
+                                try
+                                {
                                     klokInput = klokDriver.FindElement(By.XPath(klokInputXPath));
                                     Console.WriteLine("[SUCCESS] Found input after waiting!");
-                                            }
-                                            catch (NoSuchElementException)
-                                            {
+                                }
+                                catch (NoSuchElementException)
+                                {
                                     Console.WriteLine("[ERROR] Still cannot find Klokapp input!");
                                     Console.WriteLine("[DEBUG] Current page HTML:");
                                     Console.WriteLine(klokDriver.PageSource.Substring(0, 500) + "...");
@@ -576,12 +629,12 @@ class Program
         }
     }
 
-    static EdgeOptions ConfigureEdgeOptions(bool isKlok = true)
+    static EdgeOptions ConfigureEdgeOptions(bool isKite = true)
     {
         var options = new EdgeOptions();
         try
         {
-            if (isKlok)
+            if (isKite)
             {
                 if (!Directory.Exists(BASE_EDGE_USER_DATA_DIR))
                 {
@@ -594,14 +647,20 @@ class Program
             }
             else
             {
+                // Đảm bảo đường dẫn ChatGPT profile tồn tại
                 if (!Directory.Exists(CHATGPT_USER_DATA_DIR))
                 {
-                    Console.WriteLine("[WARN] ChatGPT profile directory not found, creating...");
+                    Console.WriteLine($"[INFO] Creating ChatGPT profile at: {CHATGPT_USER_DATA_DIR}");
                     Directory.CreateDirectory(CHATGPT_USER_DATA_DIR);
+                    InitializeChatGPTProfile();
+                }
+                else
+                {
+                    Console.WriteLine($"[INFO] Using existing ChatGPT profile: {CHATGPT_USER_DATA_DIR}");
                 }
                 options.AddArgument($"--user-data-dir={CHATGPT_USER_DATA_DIR}");
                 options.AddArgument("--profile-directory=Default");
-                Console.WriteLine($"[INFO] Using ChatGPT profile: {CHATGPT_USER_DATA_DIR}");
+                Console.WriteLine($"[DEBUG] ChatGPT profile path: {CHATGPT_USER_DATA_DIR}");
             }
         }
         catch (Exception ex)
@@ -715,97 +774,154 @@ class Program
                         Console.WriteLine("Doi 5 giay sau khi unlock...");
                         Thread.Sleep(5000);
 
-                        // Tìm lại cửa sổ Metamask để click nút kết nối
-                        Console.WriteLine("Tim lai cua so Metamask de ket noi...");
-                        bool foundConnectButton = false;
-                        var newWindows = driver.WindowHandles;
-
-                        Console.WriteLine("Tim nut ket noi bang nhieu cach...");
-                        try
+                        // Trong phần tìm lại cửa sổ Metamask sau khi unlock
+                        Console.WriteLine("Tim lai cua so Metamask sau khi unlock...");
+                        try 
                         {
-                            IWebElement? connectButton = null;
+                            string metamaskMainWindow = driver.CurrentWindowHandle;
                             
-                            // Cách 1: Tìm bằng data-testid
-                            try
+                            // Đợi một chút cho các cửa sổ mới xuất hiện
+                            Thread.Sleep(2000);
+
+                            foreach (string handle in driver.WindowHandles)
                             {
-                                Console.WriteLine("Thu tim nut bang data-testid...");
-                                connectButton = driver.FindElement(By.CssSelector("button[data-testid='confirm-btn']"));
-                                Console.WriteLine("Da tim thay nut bang data-testid!");
-                            }
-                            catch (NoSuchElementException)
-                            {
-                                Console.WriteLine("Khong tim thay nut bang data-testid");
+                                if (handle != metamaskMainWindow)
+                                {
+                                    Console.WriteLine("Chuyen sang cua so moi...");
+                                    driver.SwitchTo().Window(handle);
+                                    Console.WriteLine($"Tieu de cua so: {driver.Title}");
+                                    
+                                    if (driver.Title == "MetaMask")
+                                    {
+                                        Console.WriteLine("Da tim thay cua so MetaMask!");
+                                        
+                                        try
+                                        {
+                                            // Đợi lâu hơn cho UI load hoàn toàn
+                                            Console.WriteLine("Doi 3 giay cho UI load...");
+                                            Thread.Sleep(3000);
+                                            
+                                            // Thử nhiều cách tìm nút
+                                            IWebElement? connectButton = null;
+                                            
+                                            // Cách 1: Tìm bằng data-testid
+                                            Console.WriteLine("\nCach 1: Tim bang data-testid...");
+                                            try
+                                            {
+                                                connectButton = driver.FindElement(By.CssSelector("[data-testid='confirm-btn']"));
+                                                Console.WriteLine("-> Tim thay nut bang data-testid!");
+                                            }
+                                            catch (Exception ex) 
+                                            {
+                                                Console.WriteLine($"-> Khong tim thay: {ex.Message}");
+                                            }
+
+                                            // Cách 2: Tìm bằng XPath text
+                                            if (connectButton == null)
+                                            {
+                                                Console.WriteLine("\nCach 2: Tim bang XPath text...");
+                                                try
+                                                {
+                                                    connectButton = driver.FindElement(By.XPath("//button[contains(text(), 'Connect')]"));
+                                                    Console.WriteLine("-> Tim thay nut bang XPath!");
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Console.WriteLine($"-> Khong tim thay: {ex.Message}");
+                                                }
+                                            }
+
+                                            // Cách 3: Tìm tất cả button và kiểm tra text
+                                            if (connectButton == null)
+                                            {
+                                                Console.WriteLine("\nCach 3: Tim trong tat ca cac nut...");
+                                                try
+                                                {
+                                                    var buttons = driver.FindElements(By.TagName("button"));
+                                                    Console.WriteLine($"-> Tim thay {buttons.Count} nut tren trang");
+                                                    
+                                                    Console.WriteLine("Danh sach nut:");
+                                                    foreach (var button in buttons)
+                                                    {
+                                                        try
+                                                        {
+                                                            string buttonText = button.Text;
+                                                            string buttonClass = button.GetAttribute("class");
+                                                            string buttonTestId = button.GetAttribute("data-testid");
+                                                            Console.WriteLine($"- Text: '{buttonText}'");
+                                                            Console.WriteLine($"  Class: {buttonClass}");
+                                                            Console.WriteLine($"  Data-testid: {buttonTestId}");
+                                                            Console.WriteLine($"  Displayed: {button.Displayed}");
+                                                            Console.WriteLine($"  Enabled: {button.Enabled}\n");
+
+                                                            if (buttonText.Contains("Connect"))
+                                                            {
+                                                                connectButton = button;
+                                                                Console.WriteLine("-> Tim thay nut Connect!");
+                                                                break;
+                                                            }
+                                                        }
+                                                        catch (Exception ex)
+                                                        {
+                                                            Console.WriteLine($"Loi khi doc thong tin nut: {ex.Message}");
+                                                        }
+                                                    }
+                                                }
+                                                catch (Exception ex)
+                                                {
+                                                    Console.WriteLine($"-> Loi khi tim nut: {ex.Message}");
+                                                }
+                                            }
+
+                                            // Nếu tìm thấy nút, thử click
+                                            if (connectButton != null)
+                                            {
+                                                Console.WriteLine("\nKET QUA: Da tim thay nut Connect!");
+                                                Console.WriteLine($"Text: {connectButton.Text}");
+                                                Console.WriteLine($"Class: {connectButton.GetAttribute("class")}");
+                                                Console.WriteLine($"Data-testid: {connectButton.GetAttribute("data-testid")}");
+                                                Console.WriteLine($"Displayed: {connectButton.Displayed}");
+                                                Console.WriteLine($"Enabled: {connectButton.Enabled}");
+                                                
+                                                // Đợi một chút và thử click
+                                                Thread.Sleep(1000);
+                                                
+                                                if (connectButton.Displayed && connectButton.Enabled)
+                                                {
+                                                    Console.WriteLine("\nClick vao nut Connect...");
+                                                    connectButton.Click();
+                                                    Console.WriteLine("Da click nut Connect!");
+                                                    Thread.Sleep(2000);
+                                                }
+                                                else
+                                                {
+                                                    Console.WriteLine("\nNut Connect khong the click!");
+                                                }
+                                            }
+                                            else
+                                            {
+                                                Console.WriteLine("\nKET QUA: Khong tim thay nut Connect bang bat ky cach nao!");
+                                            }
+                                        }
+                                        catch (Exception ex)
+                                        {
+                                            Console.WriteLine($"\nLoi khi tim hoac click nut: {ex.Message}");
+                                        }
+
+                                        // Chuyển về cửa sổ chính
+                                        Console.WriteLine("\nChuyen ve cua so chinh");
+                                        driver.SwitchTo().Window(metamaskMainWindow);
+                                        return;
+                                    }
+                                }
                             }
 
-                            // Cách 2: Tìm bằng class
-                            if (connectButton == null)
-                            {
-                                try
-                                {
-                                    Console.WriteLine("Thu tim nut bang class...");
-                                    connectButton = driver.FindElement(By.CssSelector("button.mm-button-primary"));
-                                    Console.WriteLine("Da tim thay nut bang class!");
-                                }
-                                catch (NoSuchElementException)
-                                {
-                                    Console.WriteLine("Khong tim thay nut bang class");
-                                }
-                            }
-
-                            // Cách 3: Tìm bằng text
-                            if (connectButton == null)
-                            {
-                                try
-                                {
-                                    Console.WriteLine("Thu tim nut bang text...");
-                                    connectButton = driver.FindElement(By.XPath("//button[contains(text(), 'Kết nối')]"));
-                                    Console.WriteLine("Da tim thay nut bang text!");
-                                }
-                                catch (NoSuchElementException)
-                                {
-                                    Console.WriteLine("Khong tim thay nut bang text");
-                                }
-                            }
-
-                            // Nếu tìm thấy nút bằng bất kỳ cách nào
-                            if (connectButton != null)
-                            {
-                                Console.WriteLine("Da tim thay nut ket noi!");
-                                Console.WriteLine($"Text tren nut: {connectButton.Text}");
-                                Console.WriteLine($"Class cua nut: {connectButton.GetAttribute("class")}");
-                                
-                                if (connectButton.Displayed && connectButton.Enabled)
-                                {
-                                    Console.WriteLine("Click vao nut ket noi...");
-                                    connectButton.Click();
-                                    Console.WriteLine("Da click nut ket noi!");
-                                    foundConnectButton = true;
-                                    break;
-                                }
-                                else
-                                {
-                                    Console.WriteLine("Nut ket noi khong the click!");
-                                    Console.WriteLine($"- Hien thi: {connectButton.Displayed}");
-                                    Console.WriteLine($"- Kich hoat: {connectButton.Enabled}");
-                                }
-                            }
-                            else
-                            {
-                                Console.WriteLine("Khong tim thay nut ket noi bang bat ky cach nao!");
-                                // Log HTML để debug
-                                Console.WriteLine("HTML hien tai:");
-                                Console.WriteLine(driver.PageSource.Substring(0, 500) + "...");
-                            }
+                            Console.WriteLine("Khong tim thay cua so MetaMask!");
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"Loi khi tim nut ket noi: {ex.Message}");
+                            Console.WriteLine($"Loi khi xu ly cua so MetaMask: {ex.Message}");
                         }
-
-                        // Chuyển về cửa sổ chính
-                        driver.SwitchTo().Window(mainWindow);
-                        Console.WriteLine("Da chuyen ve cua so chinh");
-                return;
                     }
                 }
 
@@ -821,8 +937,8 @@ class Program
             if (isRunning)
             {
                 Console.WriteLine("Chuong trinh tam dung. Nhan Enter de thu lai hoac Ctrl+C de thoat...");
-            Console.ReadLine();
-            if (isRunning) HandleMetamask(driver);
+                Console.ReadLine();
+                if (isRunning) HandleMetamask(driver);
             }
         }
     }
@@ -1047,6 +1163,276 @@ class Program
         catch (Exception ex)
         {
             Console.WriteLine($"[WARN] Error creating preferences: {ex.Message}");
+        }
+    }
+
+    // Thêm hàm mới để xử lý quy trình đăng nhập Klokapp
+    static void HandleKlokLogin(IWebDriver driver)
+    {
+        try
+        {
+            // Tìm và click nút Connect Wallet
+            string buttonXPath = "/html/body/div[1]/div/div[4]/button[2]";
+            Console.WriteLine($"Dang tim nut Connect Wallet voi XPath: {buttonXPath}");
+            
+            IWebElement? button = null;
+            try 
+            {
+                button = driver.FindElement(By.XPath(buttonXPath));
+                if (button != null && button.Displayed && button.Enabled)
+                {
+                    button.Click();
+                    Console.WriteLine("Da click nut Connect Wallet");
+                    Thread.Sleep(2000);
+
+                    // Tìm và click nút Metamask trong popup
+                    string metamaskButtonXPath = "//*[@id=\"__CONNECTKIT__\"]/div/div/div/div[2]/div[2]/div[3]/div/div/div/div[1]/div[1]/div/button[1]/span";
+                    Console.WriteLine("Dang tim nut Metamask trong popup...");
+
+                    IWebElement? metamaskButton = null;
+                    try
+                    {
+                        metamaskButton = driver.FindElement(By.XPath(metamaskButtonXPath));
+                        if (metamaskButton != null && metamaskButton.Displayed && metamaskButton.Enabled)
+                        {
+                            Console.WriteLine("Click vao nut Metamask...");
+                            metamaskButton.Click();
+                            Console.WriteLine("Da click nut Metamask!");
+                            Thread.Sleep(2000);
+
+                            // Xử lý Metamask popup
+                            bool connectSuccess = HandleMetamaskConnect(driver);
+                            
+                            // Chỉ tìm nút Sign In nếu đã connect thành công
+                            if (connectSuccess)
+                            {
+                                Thread.Sleep(3000); // Đợi sau khi connect
+                                
+                                try 
+                                {
+                                    string signInButtonXPath = "/html/body/div[1]/div/div[4]/button";
+                                    Console.WriteLine("Tim nut Sign In...");
+                                    var signInButton = driver.FindElement(By.XPath(signInButtonXPath));
+                                    
+                                    if (signInButton != null && signInButton.Displayed && signInButton.Enabled)
+                                    {
+                                        Console.WriteLine("Click nut Sign In...");
+                                        signInButton.Click();
+                                        Console.WriteLine("Da click nut Sign In!");
+                                        Thread.Sleep(3000);
+
+                                        // Sau khi click Sign In, đợi và xử lý cửa sổ Metamask mới
+                                        Console.WriteLine("Doi cua so Metamask moi xuat hien...");
+                                        Thread.Sleep(3000);
+
+                                        // Tìm và xử lý cửa sổ Metamask mới
+                                        string mainWindow = driver.CurrentWindowHandle;
+                                        bool foundMetamaskWindow = false;
+
+                                        foreach (string handle in driver.WindowHandles)
+                                        {
+                                            if (handle != mainWindow)
+                                            {
+                                                driver.SwitchTo().Window(handle);
+                                                if (driver.Title == "MetaMask")
+                                                {
+                                                    Console.WriteLine("Da tim thay cua so Metamask moi!");
+                                                    foundMetamaskWindow = true;
+
+                                                    // Tab 7 lần để đến nút Confirm
+                                                    Console.WriteLine("\nTab 7 lan den nut Confirm...");
+                                                    var actions = new Actions(driver);
+                                                    for (int i = 0; i < 7; i++)
+                                                    {
+                                                        actions.SendKeys(Keys.Tab).Perform();
+                                                        Thread.Sleep(500);
+                                                        Console.WriteLine($"Tab lan {i + 1}");
+                                                    }
+
+                                                    // Click nút Confirm
+                                                    Console.WriteLine("Click nut Confirm...");
+                                                    actions.SendKeys(Keys.Enter).Perform();
+                                                    Console.WriteLine("Da click nut Confirm!");
+                                                    Thread.Sleep(2000);
+
+                                                    // Chuyển về cửa sổ chính
+                                                    driver.SwitchTo().Window(mainWindow);
+                                                    break;
+                                                }
+                                            }
+                                        }
+
+                                        if (!foundMetamaskWindow)
+                                        {
+                                            Console.WriteLine("Khong tim thay cua so Metamask moi!");
+                                        }
+                                    }
+                                }
+                                catch (Exception ex)
+                                {
+                                    Console.WriteLine($"Loi khi tim hoac click nut Sign In: {ex.Message}");
+                                }
+                            }
+                            else
+                            {
+                                Console.WriteLine("Khong tim nut Sign In vi chua connect thanh cong!");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Loi khi tim nut Metamask: {ex.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Loi khi tim nut Connect Wallet: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loi trong qua trinh dang nhap: {ex.Message}");
+        }
+    }
+
+    // Tách riêng phần xử lý Metamask connect
+    static bool HandleMetamaskConnect(IWebDriver driver)
+    {
+        try
+        {
+            Console.WriteLine("Tim lai cua so Metamask sau khi unlock...");
+            string metamaskMainWindow = driver.CurrentWindowHandle;
+            Thread.Sleep(2000);
+
+            foreach (string handle in driver.WindowHandles)
+            {
+                if (handle != metamaskMainWindow)
+                {
+                    Console.WriteLine("Chuyen sang cua so moi...");
+                    driver.SwitchTo().Window(handle);
+                    Console.WriteLine($"Tieu de cua so: {driver.Title}");
+                    
+                    if (driver.Title == "MetaMask")
+                    {
+                        Console.WriteLine("Da tim thay cua so MetaMask!");
+                        
+                        // Nhập mật khẩu và unlock
+                        Console.WriteLine("Nhap mat khau...");
+                        var actions = new Actions(driver);
+                        actions.SendKeys(METAMASK_PASSWORD).Perform();
+                        Thread.Sleep(1000);
+                        
+                        Console.WriteLine("Nhan Enter de unlock...");
+                        actions.SendKeys(Keys.Enter).Perform();
+                        
+                        // Đợi sau khi unlock
+                        Console.WriteLine("Doi 5 giay sau khi unlock...");
+                        Thread.Sleep(5000);
+
+                        // Tab 5 lần để đến nút Connect
+                        Console.WriteLine("\nTab 5 lan den nut Connect...");
+                        for (int i = 0; i < 5; i++)
+                        {
+                            actions.SendKeys(Keys.Tab).Perform();
+                            Thread.Sleep(500);
+                            Console.WriteLine($"Tab lan {i + 1}");
+                        }
+
+                        // Click nút Connect
+                        Console.WriteLine("Click nut Connect...");
+                        actions.SendKeys(Keys.Enter).Perform();
+                        Console.WriteLine("Da click nut Connect!");
+                        Thread.Sleep(2000);
+
+                        // Chuyển về cửa sổ chính
+                        driver.SwitchTo().Window(metamaskMainWindow);
+                        return true;
+                    }
+                }
+            }
+            
+            Console.WriteLine("Khong tim thay cua so MetaMask!");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loi khi xu ly Metamask connect: {ex.Message}");
+            return false;
+        }
+    }
+
+    // Hoặc tách thành hàm riêng để tái sử dụng
+    static bool HandleMetamaskConfirm(IWebDriver driver)
+    {
+        try
+        {
+            Console.WriteLine("Tim cua so Metamask de Confirm...");
+            string mainWindow = driver.CurrentWindowHandle;
+            Thread.Sleep(2000);
+
+            foreach (string handle in driver.WindowHandles)
+            {
+                if (handle != mainWindow)
+                {
+                    driver.SwitchTo().Window(handle);
+                    Console.WriteLine($"Kiem tra cua so: {driver.Title}");
+                    
+                    if (driver.Title == "MetaMask")
+                    {
+                        Console.WriteLine("Da tim thay cua so MetaMask!");
+                        Thread.Sleep(1000); // Đợi UI load
+
+                        // Tab 7 lần để đến nút Confirm
+                        Console.WriteLine("\nTab 7 lan den nut Confirm...");
+                        var actions = new Actions(driver);
+                        for (int i = 0; i < 7; i++)
+                        {
+                            actions.SendKeys(Keys.Tab).Perform();
+                            Thread.Sleep(500);
+                            Console.WriteLine($"Tab lan {i + 1}");
+                        }
+
+                        // Click nút Confirm
+                        Console.WriteLine("Click nut Confirm...");
+                        actions.SendKeys(Keys.Enter).Perform();
+                        Console.WriteLine("Da click nut Confirm!");
+                        Thread.Sleep(2000);
+
+                        // Chuyển về cửa sổ chính
+                        driver.SwitchTo().Window(mainWindow);
+                        return true;
+                    }
+                }
+            }
+            
+            Console.WriteLine("Khong tim thay cua so MetaMask!");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Loi khi xu ly Metamask confirm: {ex.Message}");
+            return false;
+        }
+    }
+
+    static void InitializeChatGPTProfile()
+    {
+        try
+        {
+            Directory.CreateDirectory(CHATGPT_USER_DATA_DIR);
+            var defaultProfilePath = Path.Combine(CHATGPT_USER_DATA_DIR, "Default");
+            Directory.CreateDirectory(defaultProfilePath);
+
+            // Copy các file cấu hình từ profile gốc chỉ khi tạo mới
+            CopyProfileFiles(Path.Combine(BASE_EDGE_USER_DATA_DIR, "Default"), defaultProfilePath);
+            
+            Console.WriteLine("[SUCCESS] Created new ChatGPT profile successfully");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[ERROR] Failed to initialize ChatGPT profile: {ex.Message}");
+            throw;
         }
     }
 }

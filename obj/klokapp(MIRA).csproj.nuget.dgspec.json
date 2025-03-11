@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "D:\\VS code\\C#\\klokapp(MIRA)\\klokapp(MIRA).csproj": {}
+    "D:\\VS code\\C#\\MIRA\\klokapp(MIRA).csproj": {}
   },
   "projects": {
-    "D:\\VS code\\C#\\klokapp(MIRA)\\klokapp(MIRA).csproj": {
+    "D:\\VS code\\C#\\MIRA\\klokapp(MIRA).csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "D:\\VS code\\C#\\klokapp(MIRA)\\klokapp(MIRA).csproj",
+        "projectUniqueName": "D:\\VS code\\C#\\MIRA\\klokapp(MIRA).csproj",
         "projectName": "klokapp(MIRA)",
-        "projectPath": "D:\\VS code\\C#\\klokapp(MIRA)\\klokapp(MIRA).csproj",
-        "packagesPath": "C:\\Users\\lovev\\.nuget\\packages\\",
-        "outputPath": "D:\\VS code\\C#\\klokapp(MIRA)\\obj\\",
+        "projectPath": "D:\\VS code\\C#\\MIRA\\klokapp(MIRA).csproj",
+        "packagesPath": "C:\\Users\\Hieu\\.nuget\\packages\\",
+        "outputPath": "D:\\VS code\\C#\\MIRA\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\lovev\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "C:\\Users\\Hieu\\AppData\\Roaming\\NuGet\\NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0"
@@ -37,12 +37,17 @@
           "enableAudit": "true",
           "auditLevel": "low",
           "auditMode": "direct"
-        }
+        },
+        "SdkAnalysisLevel": "9.0.200"
       },
       "frameworks": {
         "net8.0": {
           "targetAlias": "net8.0",
           "dependencies": {
+            "DotNetSeleniumExtras.WaitHelpers": {
+              "target": "Package",
+              "version": "[3.11.0, )"
+            },
             "Selenium.Support": {
               "target": "Package",
               "version": "[4.29.0, )"
@@ -76,7 +81,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\8.0.406/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.200/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
